@@ -1,4 +1,5 @@
 from cereal import car
+from openpilot.common.numpy_fast import clip
 from openpilot.selfdrive.car import CanBusBase
 
 HUDControl = car.CarControl.HUDControl
@@ -118,7 +119,7 @@ def create_lat_ctl2_msg(packer, CAN: CanBus, mode: int, path_offset: float, path
   return packer.make_can_msg("LateralMotionControl2", CAN.main, values)
 
 
-def create_acc_msg(packer, CAN: CanBus, long_active: bool, gas: float, accel: float, stopping: bool, v_ego_kph: float):
+def create_acc_msg(packer, CAN: CanBus, long_active: bool, gas: float, accel: float, stopping: bool, brake_actuator: bool, precharge_actuator: bool, v_ego_kph: float):
   """
   Creates a CAN message for the Ford ACC Command.
 
@@ -127,7 +128,12 @@ def create_acc_msg(packer, CAN: CanBus, long_active: bool, gas: float, accel: fl
 
   Frequency is 50Hz.
   """
-  decel = accel < 0 and long_active
+
+  # precharge_actuator = accel < -0.25 and long_active
+  # brake_actuator = gas == -5 and long_active # and accel < -.75  
+  # decel = actuate and long_active
+  # brake_actuator = precharge_actuator = decel
+  gas_pred = clip(accel, -5, 0) if gas == -5 else accel
   values = {
     "AccBrkTot_A_Rq": accel,                          # Brake total accel request: [-20|11.9449] m/s^2
     "Cmbb_B_Enbl": 1 if long_active else 0,           # Enabled: 0=No, 1=Yes
@@ -136,15 +142,15 @@ def create_acc_msg(packer, CAN: CanBus, long_active: bool, gas: float, accel: fl
     "AccResumEnbl_B_Rq": 1 if long_active else 0,
     "AccVeh_V_Trg": v_ego_kph,                        # Target speed: [0|255] km/h
     # TODO: we may be able to improve braking response by utilizing pre-charging better
-    "AccBrkPrchg_B_Rq": 1 if decel else 0,            # Pre-charge brake request: 0=No, 1=Yes
-    "AccBrkDecel_B_Rq": 1 if decel else 0,            # Deceleration request: 0=Inactive, 1=Active
+    "AccBrkPrchg_B_Rq": 1 if precharge_actuator else 0,            # Pre-charge brake request: 0=No, 1=Yes
+    "AccBrkDecel_B_Rq": 1 if brake_actuator else 0,            # Deceleration request: 0=Inactive, 1=Active
     "AccStopStat_B_Rq": 1 if stopping else 0,
   }
   return packer.make_can_msg("ACCDATA", CAN.main, values)
 
 
 def create_acc_ui_msg(packer, CAN: CanBus, CP, main_on: bool, enabled: bool, fcw_alert: bool, standstill: bool,
-                      hud_control, stock_values: dict, gac_tr_cluster):
+                      hud_control, stock_values: dict, gapUiOn, gac_tr_cluster):
   """
   Creates a CAN message for the Ford IPC adaptive cruise, forward collision warning and traffic jam
   assist status.
@@ -208,7 +214,7 @@ def create_acc_ui_msg(packer, CAN: CanBus, CP, main_on: bool, enabled: bool, fcw
     values.update({
       "AccStopStat_D_Dsply": 2 if standstill else 0,              # Stopping status text
       "AccMsgTxt_D2_Rq": 0,                                       # ACC text
-      "AccTGap_B_Dsply": 0,                                       # Show time gap control UI
+      "AccTGap_B_Dsply": gapUiOn,                                 # Show time gap control UI
       "AccFllwMde_B_Dsply": 1 if hud_control.leadVisible else 0,  # Lead indicator
       "AccStopMde_B_Dsply": 1 if standstill else 0,
       "AccWarn_D_Dsply": 0,                                       # ACC warning
