@@ -17,8 +17,6 @@ class CarState(CarStateBase):
     if CP.transmissionType == TransmissionType.automatic:
       self.shifter_values = can_define.dv["Gear_Shift_by_Wire_FD1"]["TrnRng_D_RqGsm"]
 
-    self.cluster_speed_hyst_gap = CV.KPH_TO_MS / 2.
-    self.cluster_min_speed = CV.KPH_TO_MS * 1.5
     self.vehicle_sensors_valid = False
     self.unsupported_platform = False
 
@@ -48,7 +46,6 @@ class CarState(CarStateBase):
     # car speed
     ret.vEgoRaw = cp.vl["BrakeSysFeatures"]["Veh_V_ActlBrk"] * CV.KPH_TO_MS
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
-    ret.vEgoCluster = 1.035 * ret.vEgo + CV.KPH_TO_MS
     ret.yawRate = cp.vl["Yaw_Data_FD1"]["VehYaw_W_Actl"]
     ret.standstill = cp.vl["DesiredTorqBrk"]["VehStop_D_Stat"] == 1
 
